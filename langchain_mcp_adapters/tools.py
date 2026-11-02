@@ -24,9 +24,9 @@ from langchain_core.tools import (
 )
 from langchain_core.tools.base import get_all_basemodel_annotations
 from mcp import ClientSession
-from mcp.server.fastmcp.tools import Tool as FastMCPTool
-from mcp.server.fastmcp.utilities.func_metadata import ArgModelBase, FuncMetadata
+from fastmcp.tools.function_tool import FunctionTool as FastMCPTool
 from mcp.types import (
+    PaginatedRequestParams,
     AudioContent,
     BlobResourceContents,
     ContentBlock,
@@ -37,7 +37,7 @@ from mcp.types import (
     TextResourceContents,
 )
 from mcp.types import Tool as MCPTool
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel
 
 from langchain_mcp_adapters.callbacks import CallbackContext, Callbacks, _MCPCallbacks
 from langchain_mcp_adapters.interceptors import (
@@ -255,7 +255,9 @@ async def _list_all_tools(session: ClientSession) -> list[MCPTool]:
             msg = "Reached max of 1000 iterations while listing tools."
             raise RuntimeError(msg)
 
-        list_tools_page_result = await session.list_tools(cursor=current_cursor)
+        list_tools_page_result = await session.list_tools(
+            params=PaginatedRequestParams(cursor=current_cursor)
+        )
 
         if list_tools_page_result.tools:
             all_tools.extend(list_tools_page_result.tools)
@@ -543,18 +545,10 @@ def to_fastmcp(tool: BaseTool) -> FastMCPTool:
         raise TypeError(msg)
 
     parameters = tool.tool_call_schema.model_json_schema()
-    field_definitions = {
-        field: (field_info.annotation, field_info)
-        for field, field_info in tool.tool_call_schema.model_fields.items()
-    }
-    arg_model = create_model(
-        f"{tool.name}Arguments", **field_definitions, __base__=ArgModelBase
-    )
-    fn_metadata = FuncMetadata(arg_model=arg_model)
 
     # We'll use an Any type for the function return type.
     # We're providing the parameters separately
-    async def fn(**arguments: dict[str, Any]) -> Any:  # noqa: ANN401
+    async def fn(**arguments: Any) -> Any:  # noqa: ANN401
         return await tool.ainvoke(arguments)
 
     injected_args = _get_injected_args(tool)
@@ -567,6 +561,5 @@ def to_fastmcp(tool: BaseTool) -> FastMCPTool:
         name=tool.name,
         description=tool.description,
         parameters=parameters,
-        fn_metadata=fn_metadata,
-        is_async=True,
+        return_type=Any,
     )

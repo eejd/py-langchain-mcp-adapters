@@ -5,8 +5,8 @@ from typing import Protocol, runtime_checkable
 
 from mcp.client.session import ElicitationFnT as MCPElicitationFnT
 from mcp.client.session import LoggingFnT as MCPLoggingFnT
-from mcp.shared.context import RequestContext as MCPRequestContext
-from mcp.shared.session import ProgressFnT as MCPProgressFnT
+from mcp.shared.context import BaseContext as MCPRequestContext
+from mcp.shared.dispatcher import ProgressFnT as MCPProgressFnT
 from mcp.types import (
     ElicitRequestParams as MCPElicitRequestParams,
 )

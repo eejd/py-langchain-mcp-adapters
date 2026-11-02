@@ -13,17 +13,17 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+import httpx2 as httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client
 from typing_extensions import NotRequired, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
-
-    import httpx
 
     from langchain_mcp_adapters.callbacks import _MCPCallbacks
 
@@ -340,21 +340,15 @@ async def _create_streamable_http_session(
     Yields:
         An initialized ClientSession.
     """
-    # Create and store the connection
-    kwargs = {}
-    if httpx_client_factory is not None:
-        kwargs["httpx_client_factory"] = httpx_client_factory
-
+    factory = httpx_client_factory or create_mcp_http_client
+    client_timeout = httpx.Timeout(
+        timeout.total_seconds(), read=sse_read_timeout.total_seconds()
+    )
     async with (
-        streamablehttp_client(
-            url,
-            headers,
-            timeout,
-            sse_read_timeout,
-            terminate_on_close,
-            auth=auth,
-            **kwargs,
-        ) as (read, write, _),
+        factory(headers=headers, timeout=client_timeout, auth=auth) as client,
+        streamable_http_client(
+            url, http_client=client, terminate_on_close=terminate_on_close
+        ) as (read, write),
         ClientSession(read, write, **(session_kwargs or {})) as session,
     ):
         yield session
